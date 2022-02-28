@@ -1,6 +1,15 @@
 import numpy as np
 import networkx as nx
 
+def initialize_priors(img_painted):
+    """Image painted with red for Object and blue for Source.
+        Return the Object and Background pixels."""
+    red, green, blue = np.transpose(img_painted, (2,0,1))
+    O_mask = (red > 200) * (green < 100) * (blue < 100)
+    B_mask = (red < 80) * (green < 80) * (blue > 140)
+    O = [tuple(idx) for idx in np.argwhere(O_mask)]
+    B = [tuple(idx) for idx in np.argwhere(B_mask)]
+    return O, B
 
 def image2graph(img, O, B, nbins=10):
     """Convert the iput image into a graph for the segmentation part.
@@ -92,7 +101,6 @@ def image2graph(img, O, B, nbins=10):
     A = O + B
 
     return G, A
-
 
 def growth_stage(G, A):
     """Expand the trees S and T. The active nodes A explore adjacent non-saturated
