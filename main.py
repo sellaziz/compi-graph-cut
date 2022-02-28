@@ -1,7 +1,97 @@
-import networkx
+import numpy as np
+import networkx as nx
 
-def image2graph(img):
-    return graph
+
+def image2graph(img, O, B, nbins=10):
+    """Convert the iput image into a graph for the segmentation part.
+        O, B: Object and Background pixels as list of tuple.
+    """
+
+    def get_prob(hist, value):
+        """Get probability of the input value from the input histogram."""
+        counts, bin_edges = hist
+        bin = np.argmax(bin_edges - value > 0) - 1
+        if bin == -1:
+            return 0
+        else:
+            return counts[bin] / counts.sum()
+
+    def Rp(p, label, eps=1e-10):
+        """The regional term for a pixel p, with eps to prevent infinity."""
+        proba = get_prob(hists[label], img[p])
+        return -np.log(proba or eps)
+
+    def dist(p, q):
+        """Distance L1 between pixels p and q."""
+        return abs(p[0]-q[0]) + abs(p[1]-q[1])
+
+    def Bpq(p, q, sig=1):
+        """The boundary properties term between pixels p and q."""
+        return np.exp(-(img[p]-img[q])**2/(2*sig**2)) / dist(p,q)
+
+    def get_capacity(p, q, λ=1, K=None):
+        """Compute weight between nodes p and q.
+        When q is the source S or the sink T, K must be given.
+        """
+        if q == 'S':
+            if p in O:
+                return K
+            if p in B:
+                return 0
+            return λ*Rp(p,"bkg")
+        
+        if q == 'T':
+            if p in O:
+                return 0
+            if p in B:
+                return K
+            return λ*Rp(p,"obj")
+        
+        return Bpq(p,q)
+    
+    n,p = img.shape
+    hist_O = np.histogram(O, bins=nbins, density=True)
+    hist_B = np.histogram(B, bins=nbins, density=True)
+    hists = dict(obj=hist_O, bkg=hist_B)
+
+    # Initialize graph without S and T nodes
+    G = nx.Graph()
+    for i in range(n):
+        for j in range(p):
+            if i+1 < n:
+                G.add_edge((i,j),(i+1,j), capacity=get_capacity((i,j),(i+1,j)))
+            if j+1 < p:
+                G.add_edge((i,j),(i,j+1), capacity=get_capacity((i,j),(i,j+1)))
+    
+    # Compute K
+    K = 0
+    for x in G.nodes:
+        K = max(K, np.sum([G.get_edge_data(x,y)['capacity'] for y in G.neighbors(x)]))
+    K += 1
+
+    # Add edges for S and T
+    for i in range(n):
+        for j in range(p):
+            G.add_edge((i,j),'S', capacity=get_capacity((i,j),'S',K=K))
+            G.add_edge((i,j),'T', capacity=get_capacity((i,j),'T',K=K))
+    
+    # Add other attributes
+    nx.set_node_attributes(G, None, "parent")
+    nx.set_node_attributes(G, None, "tree")
+    nx.set_edge_attributes(G, 0, "flow")
+
+    # Initialize O and B attributes
+    for node in O:
+        G.nodes[node]['parent'] = 'S'
+        G.nodes[node]['tree'] = 'S'
+    for node in B:
+        G.nodes[node]['parent'] = 'T'
+        G.nodes[node]['tree'] = 'T'
+
+    # Initial active nodes
+    A = O + B
+
+    return G, A
 
 def growth_stage(A,S,T):
     global P
