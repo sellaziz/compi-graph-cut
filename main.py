@@ -12,7 +12,7 @@ def initialize_priors(img_painted):
     return O, B
 
 def image2graph(img, O, B, nbins=10):
-    """Convert the iput image into a graph for the segmentation part.
+    """Convert the input image into a graph for the segmentation part.
         O, B: Object and Background pixels as list of tuple.
     """
 
@@ -133,7 +133,7 @@ def growth_stage(G, A):
             if neigh not in ['S', 'T']:
                 edge = G.get_edge_data(active, neigh)
 
-                if edge['capacity'] < edge['flow']:
+                if edge['capacity'] <= edge['flow']:
                     pass # Saturated egde
 
                 if G.nodes[neigh]['tree'] == None:
@@ -145,7 +145,7 @@ def growth_stage(G, A):
                     A.append(neigh)
 
                 elif  G.nodes[neigh]['tree'] != G.nodes[active]['tree']:
-                    return get_path(G, active, neigh)
+                    return get_path(active, neigh)
         A.pop(0)
     return []
 
