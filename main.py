@@ -152,6 +152,16 @@ def growth_stage(G, A):
 def augment(S,T):
     pass
 
+def get_children(G, node):
+    """Return the list of children of the input node."""
+    children = []
+    for neigh in G.neighbors(node):
+        if G.nodes[neigh]['tree'] == G.nodes[node]['tree']:
+            if G.nodes[neigh]['parent'] == node:
+                children.append(neigh)
+    return children
+
+
 def adopt(O):
     pass
 
