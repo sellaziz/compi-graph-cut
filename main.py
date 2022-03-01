@@ -149,8 +149,27 @@ def growth_stage(G, A):
         A.pop(0)
     return []
 
-def augment(S,T):
-    pass
+def augment(G, P):
+    Orphans = []
+    capacities = np.array([G.get_edge_data(P[i], P[i+1])['capacity'] for i in range(len(P)-1)])
+    flows = np.array([G.get_edge_data(P[i], P[i+1])['flow'] for i in range(len(P)-1)])
+    residuals = capacities - flows
+    df = np.min(residuals)
+    new_flows = flows + df
+    new_residuals = residuals - df
+
+    for i in range(len(P)-1):
+        G[P[i]][P[i+1]]['flow'] = new_flows[i]
+        if new_residuals[i] == 0:
+            if G.nodes[P[i]]['tree'] == 'S' and G.nodes[P[i+1]]['tree'] == 'S':
+                G.nodes[P[i+1]]['parent'] == None
+                Orphans.append(P[i+1])
+            if G.nodes[P[i]]['tree'] == 'T' and G.nodes[P[i+1]]['tree'] == 'T':
+                G.nodes[P[i]]['parent'] == None
+                Orphans.append(P[i])
+    
+    return Orphans
+
 
 def get_children(G, node):
     """Return the list of children of the input node."""
