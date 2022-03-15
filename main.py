@@ -185,15 +185,17 @@ def augment(G, P):
     return Orphans
 
 
-def get_children(G, node):
-    """Return the list of children of the input node."""
-    children = []
-    for neigh in G.neighbors(node):
-        if G.nodes[neigh]['tree'] == G.nodes[node]['tree']:
-            if G.nodes[neigh]['parent'] == node:
-                children.append(neigh)
-    return children
-
+def test_origin(G, O, node):
+    """Return the origin of the input node, e.g its furthest 
+    parent connected through non-saturated edges."""
+    origin = node
+    while True:
+        if G.nodes[origin]['parent'] in O:
+            return False
+        else:
+            origin = G.nodes[origin]['parent']
+            if origin in ['S','T']:
+                return True
 
 def adopt(Orphans, G, A):
   """
@@ -205,22 +207,33 @@ def adopt(Orphans, G, A):
   structure of sets S and T.
   """
   while Orphans:
-    for i in range(len(Orphans) - 1) :
-        p = Orphans.pop(-1)
-        children_list = list(get_children(G, p))
-        
-        for q in children_list :
-          if p == q and (G.nodes[q]['tree'] == 'S' or G.nodes[q]['tree'] == 'T') :
-            G.nodes[p]['parent'] = q
-
-          else :
-            if G.nodes[p]['tree'] == G.nodes[q]['tree'] :
-              A.append(p)
-              if G.nodes[q]['parent'] == p :
+    p = Orphans.pop()
+    
+    # Try to find a new valid parent
+    parent_found = False
+    for q in G.neighbors(p):
+        if G.nodes[p]['tree'] == G.nodes[q]['tree']:
+            edge = G.get_edge_data(q,p)
+            if edge['capacity'] > edge['flow']:
+                if test_origin(G, Orphans, q):
+                    G.nodes[p]['parent'] = q
+                    parent_found = True
+                    break
+    
+    # If no parent has been found
+    if not parent_found:
+        for q in G.neighbors(p):
+            if G.nodes[p]['tree'] == G.nodes[q]['tree']:
+                edge = G.get_edge_data(q,p)
+                if edge['capacity'] > edge['flow']:
+                    if q not in A:
+                        A.append(q)
+            if G.nodes[q]['parent'] == p:
                 Orphans.append(q)
-                G.nodes[q]['parent'] == None
-                
-            G.nodes[p]['parent'] == None
+                G.nodes[q]['parent'] = None
+        
+        G.nodes[p]['tree'] == None
+        if p in A:
             A.remove(p)
 
   return G
