@@ -27,7 +27,7 @@ def image2graph(img, O, B, nbins=10):
         else:
             return counts[bin] / counts.sum()
 
-    def Rp(p, label, eps=1e-10):
+    def Rp(p, label, eps=0.5):
         """The regional term for a pixel p, with eps to prevent infinity."""
         proba = get_prob(hists[label], img[p])
         return -np.log(proba or eps)
@@ -61,8 +61,8 @@ def image2graph(img, O, B, nbins=10):
         return Bpq(p,q)
     
     n,p = img.shape
-    hist_O = np.histogram(O, bins=nbins, density=True)
-    hist_B = np.histogram(B, bins=nbins, density=True)
+    hist_O = np.histogram([img[o] for o in O], bins=nbins, density=True)
+    hist_B = np.histogram([img[b] for b in B], bins=nbins, density=True)
     hists = dict(obj=hist_O, bkg=hist_B)
 
     # Initialize graph without S and T nodes
@@ -91,18 +91,11 @@ def image2graph(img, O, B, nbins=10):
     nx.set_node_attributes(G, None, "tree")
     nx.set_edge_attributes(G, 0, "flow")
 
-    # Initialize O and B attributes
-    for node in O:
-        G.nodes[node]['parent'] = 'S'
-        G.nodes[node]['tree'] = 'S'
-    for node in B:
-        G.nodes[node]['parent'] = 'T'
-        G.nodes[node]['tree'] = 'T'
+    # Set S & T trees
+    G.nodes['S']['tree'] = 'S'
+    G.nodes['T']['tree'] = 'T'
 
-    # Initial active nodes
-    A = ['S','T']
-
-    return G, A
+    return G
 
 def growth_stage(G, A):
     """Expand the trees S and T. The active nodes A explore adjacent non-saturated
@@ -130,13 +123,11 @@ def growth_stage(G, A):
     
     while A:
         active = A[0]
-        # print(A)
         for neigh in G.neighbors(active):
             if neigh not in ['S', 'T']:
                 edge = G.get_edge_data(active, neigh)
-
                 if edge['capacity'] <= edge['flow']:
-                    pass # Saturated egde
+                    continue # Saturated egde
 
                 if G.nodes[neigh]['tree'] == None:
                     # Add it to the growing tree (S or T)
@@ -184,21 +175,28 @@ def augment(G, P):
     
     return Orphans
 
-
-def test_origin(G, O, node):
+def test_origin(G, node):
     """Return the origin of the input node, e.g its furthest 
     parent connected through non-saturated edges."""
     origin = node
     while True:
-        if G.nodes[origin]['parent'] in O:
+        if origin in ['S','T']:
+            return True
+        
+        # Has a parent
+        parent = G.nodes[origin]['parent']
+        if not parent:
             return False
-        else:
+        
+        # Edge to parent not saturated
+        edge = G.get_edge_data(origin,parent)
+        if edge['capacity'] > edge['flow']:
             origin = G.nodes[origin]['parent']
-            if origin in ['S','T']:
-                return True
+        else:
+            return False
 
-def adopt(Orphans, G, A):
-  """
+def adopt(G, Orphans, A):
+    """
   Adoption stage: Reconstruct search trees by adopting orphans.
   During the augmentation stage, some edges became saturated. 
   As a consequence, the source and target search trees broke 
@@ -206,53 +204,55 @@ def adopt(Orphans, G, A):
   The goal of the adoption stage is to restore single-tree 
   structure of sets S and T.
   """
-  while Orphans:
-    p = Orphans.pop()
-    
-    # Try to find a new valid parent
-    parent_found = False
-    for q in G.neighbors(p):
-        if G.nodes[p]['tree'] == G.nodes[q]['tree']:
-            edge = G.get_edge_data(q,p)
-            if edge['capacity'] > edge['flow']:
-                if test_origin(G, Orphans, q):
-                    G.nodes[p]['parent'] = q
-                    parent_found = True
-                    break
-    
-    # If no parent has been found
-    if not parent_found:
+    while Orphans:
+        p = Orphans.pop()
+        
+        # Try to find a new valid parent
+        parent_found = False
         for q in G.neighbors(p):
             if G.nodes[p]['tree'] == G.nodes[q]['tree']:
                 edge = G.get_edge_data(q,p)
                 if edge['capacity'] > edge['flow']:
-                    if q not in A:
-                        A.append(q)
-            if G.nodes[q]['parent'] == p:
-                Orphans.append(q)
-                G.nodes[q]['parent'] = None
+                    if test_origin(G, q):
+                        G.nodes[p]['parent'] = q
+                        parent_found = True
+                        break
         
-        G.nodes[p]['tree'] == None
-        if p in A:
-            A.remove(p)
+        # If no parent has been found
+        if not parent_found:
+            for q in G.neighbors(p):
+                if G.nodes[p]['tree'] == G.nodes[q]['tree']:
+                    edge = G.get_edge_data(q,p)
+                    if edge['capacity'] > edge['flow']:
+                        if q not in A:
+                            A.append(q)
+                if G.nodes[q]['parent'] == p:
+                    Orphans.append(q)
+                    G.nodes[q]['parent'] = None
+            
+            G.nodes[p]['tree'] = None
+            if p in A:
+                A.remove(p)
 
-  return G
+        Orphans = list(set(Orphans))
 
+    return A
 
 def segment(G):
     # initialize: S = {s}, T = {t}, A = {s, t}, O = ∅
+    A = ['S','T']
     while True:
         # grow S or T to find an augmenting path P from s to t
-        P = growth_stage()
+        P = growth_stage(G, A)
+        # if P = ∅ terminate
         if not P:
             break
-        # if P = ∅ terminate
         # augment on P
-        augment()
+        Orphans = augment(G, P)
         # adopt orphans
-        adopt()
+        A = adopt(G, Orphans, A)
     # end while
-    pass
+    return G
 
 def test(show_im):
     ### CASE 1
