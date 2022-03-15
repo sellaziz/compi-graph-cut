@@ -195,8 +195,36 @@ def get_children(G, node):
     return children
 
 
-def adopt(O):
-    pass
+def adopt(Orphans, G, A):
+  """
+  Adoption stage: Reconstruct search trees by adopting orphans.
+  During the augmentation stage, some edges became saturated. 
+  As a consequence, the source and target search trees broke 
+  down to forests, with orphans as roots of some of its trees. 
+  The goal of the adoption stage is to restore single-tree 
+  structure of sets S and T.
+  """
+  while Orphans:
+    for i in range(len(Orphans) - 1) :
+        p = Orphans.pop(-1)
+        children_list = list(get_children(G, p))
+        
+        for q in children_list :
+          if p == q and (G.nodes[q]['tree'] == 'S' or G.nodes[q]['tree'] == 'T') :
+            G.nodes[p]['parent'] = q
+
+          else :
+            if G.nodes[p]['tree'] == G.nodes[q]['tree'] :
+              A.append(p)
+              if G.nodes[q]['parent'] == p :
+                Orphans.append(q)
+                G.nodes[q]['parent'] == None
+                
+            G.nodes[p]['parent'] == None
+            A.remove(p)
+
+  return G
+
 
 def segment(G):
     # initialize: S = {s}, T = {t}, A = {s, t}, O = ∅
