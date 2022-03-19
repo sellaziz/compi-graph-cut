@@ -74,13 +74,16 @@ def capacity(img, p, q, O, B, probs, λ=1, K=None):
     return Bpq(img,p,q)
     
 #############################################################
-def image2graph(img, O, B, nbins=10, alpha=10):
+def image2graph(img, O, B, nbins=10, alpha=10, prior_as_index=False):
     """Convert the input image into a graph for the segmentation part.
         O, B: Object and Background pixels as list of tuple.
     """
 
     n,p = img.shape
-    probs = prior_probs(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
+    if prior_as_index:
+        probs = prior_probs(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
+    else:
+        probs = prior_probs(img[O].flatten(), img[B].flatten(), nbins, alpha)
 
     # Initialize graph without S and T nodes
     G = nx.Graph()
