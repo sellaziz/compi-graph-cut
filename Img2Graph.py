@@ -68,7 +68,10 @@ def dist(p, q):
 
 def Bpq(img, p, q, sig=1, **kwargs):
     """The boundary properties term between pixels p and q."""
-    return np.exp(-sum((img[p]-img[q])**2) / (2*sig**2)) / dist(p,q)
+    if len(img.shape) == 3:
+        return np.exp(-sum((img[p]-img[q])**2) / (2*sig**2)) / dist(p,q)
+    else:
+        return np.exp(-((img[p]-img[q])**2) / (2*sig**2)) / dist(p,q)   
 
 def Rp(img, p, probs, label):
         """The regional term for a pixel p, with eps to prevent infinity."""
