@@ -41,19 +41,40 @@ def prior_probs(O_vals, B_vals, nbins, alpha:int=10):
     
     return dict(obj=proba_O, bkg=proba_B)
 
+def prior_probs_color(O_vals, B_vals, nbins, alpha:int=10):
+    # Add data all along to prevent probability of 0
+    proba_O, proba_B = [], []
+    for i in range(3):
+        data_O = np.hstack((np.repeat(O_vals[:,i],alpha), np.linspace(0,1+1/nbins, nbins)))
+        data_B = np.hstack((np.repeat(B_vals[:,i],alpha), np.linspace(0,1+1/nbins, nbins)))
+
+        hist_O = np.histogram(data_O, bins=nbins, density=True)
+        hist_B = np.histogram(data_B, bins=nbins, density=True)
+
+        hist_dist_O = scipy.stats.rv_histogram(hist_O)
+        hist_dist_B = scipy.stats.rv_histogram(hist_B)
+
+        proba_O.append(lambda x : hist_dist_O.pdf(x) / nbins)
+        proba_B.append(lambda x : hist_dist_B.pdf(x) / nbins)
+    
+    pO = lambda x : proba_O[0](x[0])*proba_O[1](x[1])*proba_O[2](x[2])
+    pB = lambda x : proba_B[0](x[0])*proba_B[1](x[1])*proba_B[2](x[2])
+    
+    return dict(obj=pO, bkg=pB)
+
 def dist(p, q):
     """Distance L1 between pixels p and q."""
     return abs(p[0]-q[0]) + abs(p[1]-q[1])
 
-def Bpq(img, p, q, sig=1):
+def Bpq(img, p, q, sig=1, **kwargs):
     """The boundary properties term between pixels p and q."""
-    return np.exp(-(img[p]-img[q])**2 / (2*sig**2)) / dist(p,q)
+    return np.exp(-sum((img[p]-img[q])**2) / (2*sig**2)) / dist(p,q)
 
 def Rp(img, p, probs, label):
         """The regional term for a pixel p, with eps to prevent infinity."""
         return -np.log(probs[label](img[p]))
 
-def capacity(img, p, q, O, B, probs, λ=1, K=None):
+def capacity(img, p, q, O, B, probs, λ=1, K=None, **kwargs):
     """Compute weight between nodes p and q.
     When q is the source S or the sink T, K must be given.
     """
@@ -71,28 +92,36 @@ def capacity(img, p, q, O, B, probs, λ=1, K=None):
             return K
         return λ*Rp(img,p,probs,"obj")
     
-    return Bpq(img,p,q)
+    return Bpq(img,p,q, **kwargs)
     
 #############################################################
-def image2graph(img, O, B, nbins=10, alpha=10, prior_as_index=False):
+def image2graph(img, O, B, nbins=10, alpha=10, prior_as_index=False, **kwargs):
     """Convert the input image into a graph for the segmentation part.
         O, B: Object and Background pixels as list of tuple.
     """
 
-    n,p = img.shape
-    if prior_as_index:
-        probs = prior_probs(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
-    else:
-        probs = prior_probs(img[O].flatten(), img[B].flatten(), nbins, alpha)
+    shape = img.shape
+    if len(shape) == 2:
+        n,p = shape
+        if prior_as_index:
+            probs = prior_probs(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
+        else:
+            probs = prior_probs(img[O], img[B], nbins, alpha)
+    elif len(shape) == 3:
+        n,p,_ = shape
+        if prior_as_index:
+            probs = prior_probs_color(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
+        else:
+            probs = prior_probs_color(img[O], img[B], nbins, alpha)
 
     # Initialize graph without S and T nodes
     G = nx.Graph()
     for i in range(n):
         for j in range(p):
             if i+1 < n:
-                G.add_edge((i,j),(i+1,j), capacity=capacity(img, (i,j), (i+1,j), O, B, probs))
+                G.add_edge((i,j),(i+1,j), capacity=capacity(img, (i,j), (i+1,j), O, B, probs, **kwargs))
             if j+1 < p:
-                G.add_edge((i,j),(i,j+1), capacity=capacity(img, (i,j), (i,j+1), O, B, probs))
+                G.add_edge((i,j),(i,j+1), capacity=capacity(img, (i,j), (i,j+1), O, B, probs, **kwargs))
     
     # Compute K
     K = 0
@@ -103,8 +132,8 @@ def image2graph(img, O, B, nbins=10, alpha=10, prior_as_index=False):
     # Add edges for S and T
     for i in range(n):
         for j in range(p):
-            G.add_edge((i,j),'S', capacity=capacity(img, (i,j), 'S', O, B, probs, K=K))
-            G.add_edge((i,j),'T', capacity=capacity(img, (i,j), 'T', O, B, probs, K=K))
+            G.add_edge((i,j),'S', capacity=capacity(img, (i,j), 'S', O, B, probs, K=K, **kwargs))
+            G.add_edge((i,j),'T', capacity=capacity(img, (i,j), 'T', O, B, probs, K=K, **kwargs))
     
     # Add other attributes
     nx.set_node_attributes(G, None, "parent")
