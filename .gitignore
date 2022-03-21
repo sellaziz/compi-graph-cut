@@ -1,3 +1,7 @@
+./results/*
+./results_bak/*
+examples_utils.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
