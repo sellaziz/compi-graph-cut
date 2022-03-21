@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
 import scipy.stats
+from scipy.stats import gaussian_kde
 
 #############################################################
 def initialize_priors(img_painted):
@@ -24,119 +25,87 @@ def graph2img(G, n, p):
                 seg[i,j] = -1
     return seg
 
+def graph2cuts(G, n, p):
+    segH = np.zeros((n,p))
+    for i in range(n-1):
+        for j in range(p):
+            edge = G.get_edge_data((i,j), (i+1,j))
+            if edge['capacity'] > edge['flow']:
+                segH[i,j] = 1
+            else:
+                segH[i,j] = -1
+    
+    segW = np.zeros((n,p))
+    for i in range(n):
+        for j in range(p-1):
+            edge = G.get_edge_data((i,j), (i,j+1))
+            if edge['capacity'] > edge['flow']:
+                segW[i,j] = 1
+            else:
+                segW[i,j] = -1
+    
+    return segH, segW
+
 #############################################################
-def prior_probs(O_vals, B_vals, nbins, alpha:int=10):
-    # Add data all along to prevent probability of 0
-    data_O = np.hstack((np.repeat(O_vals,alpha), np.linspace(0,1+1/nbins, nbins)))
-    data_B = np.hstack((np.repeat(B_vals,alpha), np.linspace(0,1+1/nbins, nbins)))
 
-    hist_O = np.histogram(data_O, bins=nbins, density=True)
-    hist_B = np.histogram(data_B, bins=nbins, density=True)
+def Rp_prob(O_vals, B_vals):
+    Rp_O = lambda x : np.clip(- gaussian_kde(O_vals.T).logpdf(x.T), a_min=0, a_max=None)
+    Rp_B = lambda x : np.clip(- gaussian_kde(B_vals.T).logpdf(x.T), a_min=0, a_max=None)
+    return dict(obj=Rp_O, bkg=Rp_B)
 
-    hist_dist_O = scipy.stats.rv_histogram(hist_O)
-    hist_dist_B = scipy.stats.rv_histogram(hist_B)
+def create_edges(n,p):
+    I,J = np.meshgrid(np.arange(n), np.arange(p))
+    coord = np.vstack([I.ravel(), J.ravel()]).T
+    coord_I = coord[coord[:,0] < n-1]
+    coord_J = coord[coord[:,1] < p-1]
+    edge_I = np.hstack((coord_I, coord_I + [1,0])).reshape((n-1)*p,2,2)
+    edge_J = np.hstack((coord_J, coord_J + [0,1])).reshape(n*(p-1),2,2)
+    return np.vstack((edge_I,edge_J))
 
-    proba_O = lambda x : hist_dist_O.pdf(x) / nbins
-    proba_B = lambda x : hist_dist_B.pdf(x) / nbins
-    
-    return dict(obj=proba_O, bkg=proba_B)
-
-def prior_probs_color(O_vals, B_vals, nbins, alpha:int=10):
-    # Add data all along to prevent probability of 0
-    proba_O, proba_B = [], []
-    for i in range(3):
-        data_O = np.hstack((np.repeat(O_vals[:,i],alpha), np.linspace(0,1+1/nbins, nbins)))
-        data_B = np.hstack((np.repeat(B_vals[:,i],alpha), np.linspace(0,1+1/nbins, nbins)))
-
-        hist_O = np.histogram(data_O, bins=nbins, density=True)
-        hist_B = np.histogram(data_B, bins=nbins, density=True)
-
-        hist_dist_O = scipy.stats.rv_histogram(hist_O)
-        hist_dist_B = scipy.stats.rv_histogram(hist_B)
-
-        proba_O.append(lambda x : hist_dist_O.pdf(x) / nbins)
-        proba_B.append(lambda x : hist_dist_B.pdf(x) / nbins)
-    
-    pO = lambda x : proba_O[0](x[0])*proba_O[1](x[1])*proba_O[2](x[2])
-    pB = lambda x : proba_B[0](x[0])*proba_B[1](x[1])*proba_B[2](x[2])
-    
-    return dict(obj=pO, bkg=pB)
-
-def dist(p, q):
-    """Distance L1 between pixels p and q."""
-    return abs(p[0]-q[0]) + abs(p[1]-q[1])
-
-def Bpq(img, p, q, sig=1, **kwargs):
-    """The boundary properties term between pixels p and q."""
-    if len(img.shape) == 3:
-        return np.exp(-sum((img[p]-img[q])**2) / (2*sig**2)) / dist(p,q)
-    else:
-        return np.exp(-((img[p]-img[q])**2) / (2*sig**2)) / dist(p,q)   
-
-def Rp(img, p, probs, label):
-        """The regional term for a pixel p, with eps to prevent infinity."""
-        return -np.log(probs[label](img[p]))
-
-def capacity(img, p, q, O, B, probs, λ=1, K=None, **kwargs):
-    """Compute weight between nodes p and q.
-    When q is the source S or the sink T, K must be given.
-    """
-    if q == 'S':
-        if p in O:
-            return K
-        if p in B:
-            return 0
-        return λ*Rp(img,p,probs,"bkg")
-    
-    if q == 'T':
-        if p in O:
-            return 0
-        if p in B:
-            return K
-        return λ*Rp(img,p,probs,"obj")
-    
-    return Bpq(img,p,q, **kwargs)
-    
 #############################################################
-def image2graph(img, O, B, nbins=10, alpha=10, prior_as_index=False, **kwargs):
+def image2graph(img, O, B, prior_as_index=False, σ=1, λ=1, **kwargs):
     """Convert the input image into a graph for the segmentation part.
         O, B: Object and Background pixels as list of tuple.
     """
 
-    shape = img.shape
-    if len(shape) == 2:
-        n,p = shape
-        if prior_as_index:
-            probs = prior_probs(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
-        else:
-            probs = prior_probs(img[O], img[B], nbins, alpha)
-    elif len(shape) == 3:
-        n,p,_ = shape
-        if prior_as_index:
-            probs = prior_probs_color(img[tuple(np.array(O).T)], img[tuple(np.array(B).T)], nbins, alpha)
-        else:
-            probs = prior_probs_color(img[O], img[B], nbins, alpha)
+    n,p = img.shape[:2]
+    
+    if prior_as_index:
+        O_vals, B_vals = img[tuple(np.array(O).T)], img[tuple(np.array(B).T)]
+    else:
+        O_vals, B_vals = img[O], img[B]
+
+    # Regional term Rp
+    Rp = Rp_prob(O_vals, B_vals)
 
     # Initialize graph without S and T nodes
-    G = nx.Graph()
-    for i in range(n):
-        for j in range(p):
-            if i+1 < n:
-                G.add_edge((i,j),(i+1,j), capacity=capacity(img, (i,j), (i+1,j), O, B, probs, **kwargs))
-            if j+1 < p:
-                G.add_edge((i,j),(i,j+1), capacity=capacity(img, (i,j), (i,j+1), O, B, probs, **kwargs))
+    edges = create_edges(n,p)
+    edges_tup = list(map(lambda x : ((tuple(x[0]),tuple(x[1]))),edges))
+
+    # Compute capacities (Bpq)
+    if len(img.shape) > 2:
+        capacities = np.exp(-np.sum(((img[tuple(edges[:,0].T)]-img[tuple(edges[:,1].T)])**2),axis=1) / (2*σ**2))
+    else:
+        capacities = np.exp(-((img[tuple(edges[:,0].T)]-img[tuple(edges[:,1].T)])**2) / (2*σ**2))
+    
+    # Add nodes
+    G = nx.Graph(edges_tup)
+    # Add capacities
+    nx.set_edge_attributes(G, dict(map(lambda x,c : (x, {"capacity":c}), edges_tup, capacities)))
     
     # Compute K
-    K = 0
-    for x in G.nodes:
-        K = max(K, np.sum([G.get_edge_data(x,y)['capacity'] for y in G.neighbors(x)]))
-    K += 1
+    K = 1 + np.max([np.sum([G.get_edge_data(x,y)['capacity'] for y in G.neighbors(x)]) for x in G.nodes])
 
     # Add edges for S and T
     for i in range(n):
         for j in range(p):
-            G.add_edge((i,j),'S', capacity=capacity(img, (i,j), 'S', O, B, probs, K=K, **kwargs))
-            G.add_edge((i,j),'T', capacity=capacity(img, (i,j), 'T', O, B, probs, K=K, **kwargs))
+            if (i,j) in B:
+                G.add_edge((i,j),'T', capacity=K)
+            elif (i,j) in O:
+                G.add_edge((i,j),'S', capacity=K)
+            else:
+                G.add_edge((i,j),'T', capacity=λ*Rp["obj"](img[(i,j)])[0])
+                G.add_edge((i,j),'S', capacity=λ*Rp["bkg"](img[(i,j)])[0])
     
     # Add other attributes
     nx.set_node_attributes(G, None, "parent")
@@ -147,4 +116,4 @@ def image2graph(img, O, B, nbins=10, alpha=10, prior_as_index=False, **kwargs):
     G.nodes['S']['tree'] = 'S'
     G.nodes['T']['tree'] = 'T'
 
-    return G, probs
+    return G, Rp
