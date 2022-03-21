@@ -49,14 +49,14 @@ def graph2cuts(G, n, p):
 #############################################################
 
 def Rp_prob(O_vals, B_vals):
-    if len(set(list(O_vals))) > 2:
+    if isinstance(B_vals[0], np.ndarray) or len(set(list(B_vals))) > 2:
         log_pdf_O = gaussian_kde(O_vals.T).logpdf
     else:
-        log_pdf_O = gaussian_kde(list(np.linspace(0,1,10)) + [O_vals[0]], weights=[1]*10+[10]).logpdf
+        log_pdf_O = gaussian_kde(O_vals.T).logpdf
     Rp_O = lambda x : np.clip(np.log(len(O_vals))-log_pdf_O(x.T), a_min=0, a_max=None)
 
-    if len(set(list(B_vals))) > 2:
-        log_pdf_B = gaussian_kde(O_vals.T).logpdf
+    if isinstance(B_vals[0], np.ndarray) or len(set(list(B_vals))) > 2:
+        log_pdf_B = gaussian_kde(B_vals.T).logpdf
     else:
         log_pdf_B = gaussian_kde(list(np.linspace(0,1,10)) + [B_vals[0]], weights=[1]*10+[10]).logpdf
     Rp_B = lambda x : np.clip(np.log(len(B_vals))-log_pdf_B(x.T), a_min=0, a_max=None)
