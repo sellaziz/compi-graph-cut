@@ -97,15 +97,27 @@ def image2graph(img, O, B, prior_as_index=False, σ=1, λ=1, **kwargs):
     K = 1 + np.max([np.sum([G.get_edge_data(x,y)['capacity'] for y in G.neighbors(x)]) for x in G.nodes])
 
     # Add edges for S and T
-    for i in range(n):
-        for j in range(p):
-            if (i,j) in B:
-                G.add_edge((i,j),'T', capacity=K)
-            elif (i,j) in O:
-                G.add_edge((i,j),'S', capacity=K)
-            else:
-                G.add_edge((i,j),'T', capacity=λ*Rp["obj"](img[(i,j)])[0])
-                G.add_edge((i,j),'S', capacity=λ*Rp["bkg"](img[(i,j)])[0])
+    if prior_as_index:
+        for i in range(n):
+            for j in range(p):
+                if (i,j) in B:
+                    G.add_edge((i,j),'T', capacity=K)
+                elif (i,j) in O:
+                    G.add_edge((i,j),'S', capacity=K)
+                else:
+                    G.add_edge((i,j),'T', capacity=λ*Rp["obj"](img[(i,j)])[0])
+                    G.add_edge((i,j),'S', capacity=λ*Rp["bkg"](img[(i,j)])[0])
+    else:
+        for i in range(n):
+            for j in range(p):
+                if B[i,j] == 1:
+                    G.add_edge((i,j),'T', capacity=K)
+                elif O[i,j] == 1:
+                    G.add_edge((i,j),'S', capacity=K)
+                else:
+                    G.add_edge((i,j),'T', capacity=λ*Rp["obj"](img[(i,j)])[0])
+                    G.add_edge((i,j),'S', capacity=λ*Rp["bkg"](img[(i,j)])[0])
+
     
     # Add other attributes
     nx.set_node_attributes(G, None, "parent")
