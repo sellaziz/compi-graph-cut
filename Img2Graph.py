@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import scipy.stats
 from scipy.stats import gaussian_kde
+import maxflow
 
 #############################################################
 def initialize_priors(img_painted):
@@ -139,3 +140,74 @@ def image2graph(img, O, B, prior_as_index=False, σ=1, λ=1, **kwargs):
     G.nodes['T']['tree'] = 'T'
 
     return G, Rp
+
+def image2graph_lib(img, O, B, prior_as_index=False, σ=1, λ=1, **kwargs):
+    """Convert the input image into a graph for the segmentation part.
+        O, B: Object and Background pixels as list of tuple.
+    """
+
+    n,p = img.shape[:2]
+    
+    if prior_as_index:
+        O_vals, B_vals = img[tuple(np.array(O).T)], img[tuple(np.array(B).T)]
+    else:
+        O_vals, B_vals = img[O], img[B]
+
+    # Regional term Rp
+    Rp = Rp_prob(O_vals, B_vals)
+
+    # Initialize graph without S and T nodes
+    edges = create_edges(n,p)
+    edges_tup = list(map(lambda x : ((tuple(x[0]),tuple(x[1]))),edges))
+
+    # Compute capacities (Bpq)
+    if len(img.shape) > 2:
+        capacities = np.exp(-np.sum(((img[tuple(edges[:,0].T)]-img[tuple(edges[:,1].T)])**2),axis=1) / (2*σ**2))
+    else:
+        capacities = np.exp(-((img[tuple(edges[:,0].T)]-img[tuple(edges[:,1].T)])**2) / (2*σ**2))
+    
+    # Add nodes
+    G = maxflow.Graph[float](0, 0)
+    nodeids = G.add_grid_nodes(img.shape)
+    # Add capacities
+    # nx.set_edge_attributes(G, dict(map(lambda x,c : (x, {"capacity":c}), edges_tup, capacities)))
+    # map(lambda x,c : G.add_edge(nodeids[x[0][0],x[0][1]], nodeids[x[1][0],x[1][1]], c, c), edges_tup, capacities)
+    for i in range(len(edges_tup)):
+        x=edges_tup[i]
+        c=capacities[i]
+        G.add_edge(nodeids[x[0][0],x[0][1]], nodeids[x[1][0],x[1][1]], c, c)
+    # Compute K
+    # K = 1 + np.max([np.sum([G.get_edge_data(x,y)['capacity'] for y in G.neighbors(x)]) for x in G.nodes])
+    Gnx=G.get_nx_graph()
+    K = 1 + np.max([np.sum([Gnx.get_edge_data(x,y)['weight'] for y in Gnx.neighbors(x)]) for x in Gnx.nodes])
+
+    # Add edges for S and T
+    if prior_as_index:
+        for i in range(n):
+            for j in range(p):
+                if (i,j) in B:
+                    G.add_tedge(nodeids[i,j], 0,K)
+                    # G.add_edge((i,j),'T', capacity=K)
+                elif (i,j) in O:
+                    G.add_tedge(nodeids[i,j], K,0)
+                    # G.add_edge((i,j),'S', capacity=K)
+                else:
+                    G.add_tedge(nodeids[i,j], λ*Rp["bkg"](img[(i,j)])[0], λ*Rp["obj"](img[(i,j)])[0])
+                    # G.add_tedge(nodeids[i,j], K,K)
+                    # G.add_edge((i,j),'T', capacity=λ*Rp["obj"](img[(i,j)])[0])
+                    # G.add_edge((i,j),'S', capacity=λ*Rp["bkg"](img[(i,j)])[0])
+    else:
+        for i in range(n):
+            for j in range(p):
+                if B[i,j] == 1:
+                    G.add_tedge(nodeids[i,j], 0,K)
+                    # G.add_edge((i,j),'T', capacity=K)
+                elif O[i,j] == 1:
+                    G.add_tedge(nodeids[i,j], K,0)
+                    # G.add_edge((i,j),'S', capacity=K)
+                else:
+                    G.add_tedge(nodeids[i,j], λ*Rp["bkg"](img[(i,j)])[0], λ*Rp["obj"](img[(i,j)])[0])
+                    # G.add_edge((i,j),'T', capacity=λ*Rp["obj"](img[(i,j)])[0])
+                    # G.add_edge((i,j),'S', capacity=λ*Rp["bkg"](img[(i,j)])[0])
+    return G, Rp, nodeids
+
