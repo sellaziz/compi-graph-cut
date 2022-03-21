@@ -1,5 +1,5 @@
-./results/*
-./results_bak/*
+results/
+results_bak/
 examples_utils.py
 
 # Byte-compiled / optimized / DLL files
