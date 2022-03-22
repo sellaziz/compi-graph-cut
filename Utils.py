@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from main import *
+from Img2Graph import graph2img
+from matplotlib.animation import FuncAnimation
 
 def Simple_Image(image, cmap, title):
     fig = plt.figure()
@@ -35,14 +38,44 @@ def visualize_Rp(Rp, N=100):
 
     plt.subplot(121)
     plt.title("Regional term Oject")
-    plt.plot(X, Rp["obj"](X))
+    plt.plot(X, Rp["obj"](X), c='r')
     plt.xlabel('Pixel Intensity')
     plt.ylabel('$R_{p}(obj)$')
 
     plt.subplot(122)
     plt.title("Regional term Background")
-    plt.plot(X, Rp["bkg"](X))
+    plt.plot(X, Rp["bkg"](X), c='b')
     plt.xlabel('Pixel Intensity')
     plt.ylabel('$R_{p}(bkg)$')
     
     plt.show()
+
+def segmentation_images(G, img):
+    A = ['S','T']
+    images = []
+    while True:
+
+        P = grow(G, A)
+        if not P:
+            break
+        Orphans = augment(G, P)
+        A = adopt(G, Orphans, A)
+        images.append(graph2img(G, *img.shape))
+    
+    images.append(graph2img(G, *img.shape))
+    return G, images
+
+def segmentation_animation(images, interval=1):
+    
+    fig = plt.figure()
+    plt.title('Segementation process')
+    im = plt.imshow(images[0], cmap='seismic')
+
+    def animate(i):
+        return [im.set_array(images[i])]
+    
+    frames = [i for i in range(0, len(images), interval)] + [len(images)-1]
+    anim_created = FuncAnimation(fig, animate, frames=iter(frames))
+    
+    video = anim_created.to_jshtml()
+    return video
