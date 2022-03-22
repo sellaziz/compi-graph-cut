@@ -1,8 +1,10 @@
+# Functions to go from an image to a graph and vice-versa
+
 import networkx as nx
 import numpy as np
 import scipy.stats
 from scipy.stats import gaussian_kde
-# import maxflow
+import maxflow
 
 #############################################################
 def initialize_priors(img_painted):

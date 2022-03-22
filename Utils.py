@@ -1,3 +1,5 @@
+# Some useful functions for the Presentation Notebook
+
 import matplotlib.pyplot as plt
 import numpy as np
 from main import *
