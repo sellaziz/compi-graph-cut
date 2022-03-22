@@ -2,7 +2,7 @@
 School Project on Graph-Cut Image Segementation from the course Computational Imaging of IMT Atlantique
 
 
-## Paper used in this project
+## Paper this project is based on
 
 	"An Experimental Comparison of Min-Cut/Max-Flow Algorithms for Energy Minimization in Vision."
 	Yuri Boykov and Vladimir Kolmogorov.
@@ -16,3 +16,7 @@ School Project on Graph-Cut Image Segementation from the course Computational Im
     Int J Comput Vision 70, 109–131 
     (2006)
     https://doi.org/10.1007/s11263-006-7934-5
+
+## Dataset used for experiments
+
+    https://www.robots.ox.ac.uk/~vgg/data/iseg/
