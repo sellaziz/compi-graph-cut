@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 import scipy.stats
 from scipy.stats import gaussian_kde
-import maxflow
+# import maxflow
 
 #############################################################
 def initialize_priors(img_painted):
