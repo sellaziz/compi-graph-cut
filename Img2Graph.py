@@ -7,12 +7,19 @@ from scipy.stats import gaussian_kde
 import maxflow
 
 #############################################################
-def initialize_priors(img_painted):
+def initialize_priors(img_painted, from_dataset=False, float_enc=False):
     """Image painted with red for Object and blue for Source.
         Return the Object and Background pixels."""
-    red, green, blue = np.transpose(img_painted, (2,0,1))
-    O_mask = (red > 200) * (green < 100) * (blue < 100)
-    B_mask = (red < 80) * (green < 80) * (blue > 140)
+    if float_enc:
+        red, green, blue = np.transpose(img_painted, (2,0,1))*255
+    else:
+        red, green, blue = np.transpose(img_painted, (2,0,1))
+    if from_dataset:
+        O_mask = (red > 50) * (green < 70) * (blue < 70)
+        B_mask = (red > 70) * (green > 70) * (blue > 70) # white mask
+    else:
+        O_mask = (red > 200) * (green < 100) * (blue < 100)
+        B_mask = (red < 80) * (green < 80) * (blue > 140)
     O = [tuple(idx) for idx in np.argwhere(O_mask)]
     B = [tuple(idx) for idx in np.argwhere(B_mask)]
     return O, B
@@ -82,7 +89,7 @@ def image2graph(img, O, B, prior_as_index=False, σ=1, λ=1, **kwargs):
     """Convert the input image into a graph for the segmentation part.
         O, B: Object and Background pixels as list of tuple.
     """
-
+    assert len(O) != 0 and len(B) != 0,"O or B is empty!"
     n,p = img.shape[:2]
     
     if prior_as_index:
@@ -149,7 +156,7 @@ def image2graph_lib(img, O, B, prior_as_index=False, σ=1, λ=1, **kwargs):
     """Convert the input image into a graph for the segmentation part.
         O, B: Object and Background pixels as list of tuple.
     """
-
+    assert len(O) != 0 and len(B) != 0,"O or B is empty!"
     n,p = img.shape[:2]
     
     if prior_as_index:
